@@ -7,7 +7,7 @@
 
 ### Core Architecture
 - [ ] **ARCH-01**: Node.js/Electron host agent to capture and stream the desktop screen
-- [ ] **ARCH-02**: Node.js signaling server using Socket.IO to manage connections
+- [x] **ARCH-02**: Node.js signaling server using Socket.IO to manage connections
 - [ ] **ARCH-03**: React web application viewer to display the screen and capture input
 
 ### Streaming
@@ -21,7 +21,7 @@
 - [ ] **CTRL-04**: Host agent executes received input events natively using OS-level APIs
 
 ### UI & Permissions
-- [ ] **UIPR-01**: Viewer UI has a Clean, minimalistic design with vanilla CSS modules
+- [ ] **UIPR-01**: Viewer UI has a Clean, minimalistic design using Tailwind CSS
 - [ ] **UIPR-02**: Explicit toggle in the viewer allowing the host to grant or revoke control permissions
 - [ ] **UIPR-03**: Connection status indicator (e.g., Green/Red dot) for both host and viewer
 
@@ -38,14 +38,14 @@
 | Browser-only Host | Impossible due to browser sandboxing constraints. |
 | File Transfer | Not mentioned in scope, increases complexity. |
 | User Accounts | Educational purposes only, no need for robust auth. |
-| Tailwind CSS | Explicit user preference for vanilla CSS. |
+| Vanilla CSS | User decided to use Tailwind over vanilla CSS |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ARCH-01 | Phase 1 | Pending |
-| ARCH-02 | Phase 1 | Pending |
+| ARCH-02 | Phase 1 | Complete |
 | ARCH-03 | Phase 1 | Pending |
 | STRM-01 | Phase 2 | Pending |
 | STRM-02 | Phase 2 | Pending |
