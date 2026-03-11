@@ -6,6 +6,67 @@
   </head>
   <body>
     <h1>Host Agent</h1>
-    <p>Waiting for connection...</p>
+    <p id="status">Waiting for connection...</p>
+    
+    <script>
+      const { ipcRenderer } = require('electron');
+      const io = require('socket.io-client');
+      const SimplePeer = require('simple-peer');
+
+      const socket = io('http://localhost:3000');
+      let peer;
+
+      // Handle older Node.js events implementation expectation from simple-peer
+      process.on('uncaughtException', err => {
+        console.error('Unhandled Exception:', err);
+      });
+
+      ipcRenderer.on('set-source', async (event, sourceId) => {
+        try {
+          // Note: using the older constraints format for electron desktopCapturer
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              mandatory: {
+                chromeMediaSource: 'desktop',
+                chromeMediaSourceId: sourceId
+              }
+            }
+          });
+          
+          document.getElementById('status').innerText = 'Screen captured. Waiting for viewer...';
+
+          // Initialize WebRTC Peer as the initiator
+          peer = new SimplePeer({
+            initiator: true,
+            stream: stream,
+            trickle: true 
+          });
+
+          // Forward WebRTC signaling data to the Node.js server
+          peer.on('signal', data => {
+            socket.emit('signal', data);
+          });
+
+          // Receive WebRTC signaling data from the Node.js server
+          socket.on('signal', data => {
+            peer.signal(data);
+          });
+
+          peer.on('connect', () => {
+            document.getElementById('status').innerText = 'Viewer connected! Streaming...';
+          });
+
+          peer.on('error', err => {
+            console.error('Peer error:', err);
+            document.getElementById('status').innerText = 'Connection error.';
+          });
+
+        } catch (e) {
+          console.error('Stream Setup Error:', e);
+          document.getElementById('status').innerText = 'Error capturing screen: ' + e.message;
+        }
+      });
+    </script>
   </body>
 </html>
