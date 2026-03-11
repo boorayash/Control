@@ -18,6 +18,10 @@ const io = new Server(httpServer, {
 io.on('connection', (socket) => {
   console.log(`[Signaling Server] Client connected: ${socket.id}`);
 
+  socket.on('signal', (data) => {
+    socket.broadcast.emit('signal', data);
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Signaling Server] Client disconnected: ${socket.id}`);
   });
