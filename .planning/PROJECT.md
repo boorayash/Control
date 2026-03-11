@@ -31,7 +31,7 @@ Direct, low-latency screen sharing and remote control with zero visual noise or 
 
 Project is being built for an academic/educational presentation.
 The architecture requires a split between a desktop agent (for the host) and a web app (for the viewer), brokered by a signaling server.
-UI will use vanilla CSS/CSS modules for a premium aesthetic, not Tailwind.
+UI will use Tailwind CSS for a premium aesthetic.
 
 ## Constraints
 
@@ -44,7 +44,7 @@ UI will use vanilla CSS/CSS modules for a premium aesthetic, not Tailwind.
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Desktop Agent | Required to capture OS events since browsers cannot directly | — Pending |
-| Vanilla CSS | Deliver a rich, dynamic aesthetic aligned with user preference | — Pending |
+| Tailwind CSS | Deliver a rich, dynamic aesthetic based on user preference | — Pending |
 | WebRTC | Low latency required for video, WebSockets are too slow | — Pending |
 
 ---

@@ -6,9 +6,9 @@
 ## v1 Requirements
 
 ### Core Architecture
-- [ ] **ARCH-01**: Node.js/Electron host agent to capture and stream the desktop screen
+- [x] **ARCH-01**: Node.js/Electron host agent to capture and stream the desktop screen
 - [x] **ARCH-02**: Node.js signaling server using Socket.IO to manage connections
-- [ ] **ARCH-03**: React web application viewer to display the screen and capture input
+- [x] **ARCH-03**: React web application viewer to display the screen and capture input
 
 ### Streaming
 - [ ] **STRM-01**: Host agent streams screen video to viewer via WebRTC
@@ -21,7 +21,7 @@
 - [ ] **CTRL-04**: Host agent executes received input events natively using OS-level APIs
 
 ### UI & Permissions
-- [ ] **UIPR-01**: Viewer UI has a Clean, minimalistic design using Tailwind CSS
+- [x] **UIPR-01**: Viewer UI has a Clean, minimalistic design using Tailwind CSS
 - [ ] **UIPR-02**: Explicit toggle in the viewer allowing the host to grant or revoke control permissions
 - [ ] **UIPR-03**: Connection status indicator (e.g., Green/Red dot) for both host and viewer
 
@@ -44,16 +44,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 | Phase 1 | Pending |
+| ARCH-01 | Phase 1 | Complete |
 | ARCH-02 | Phase 1 | Complete |
-| ARCH-03 | Phase 1 | Pending |
+| ARCH-03 | Phase 1 | Complete |
 | STRM-01 | Phase 2 | Pending |
 | STRM-02 | Phase 2 | Pending |
 | CTRL-01 | Phase 3 | Pending |
 | CTRL-02 | Phase 3 | Pending |
 | CTRL-03 | Phase 3 | Pending |
 | CTRL-04 | Phase 3 | Pending |
-| UIPR-01 | Phase 4 | Pending |
+| UIPR-01 | Phase 4 | Complete |
 | UIPR-02 | Phase 4 | Pending |
 | UIPR-03 | Phase 4 | Pending |
 
