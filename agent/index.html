@@ -53,6 +53,19 @@
             peer.signal(data);
           });
 
+          // Relay input control events to main process
+          socket.on('mouse-move', data => {
+            ipcRenderer.send('mouse-move', data);
+          });
+
+          socket.on('mouse-click', data => {
+            ipcRenderer.send('mouse-click', data);
+          });
+
+          socket.on('key-event', data => {
+            ipcRenderer.send('key-event', data);
+          });
+
           peer.on('connect', () => {
             document.getElementById('status').innerText = 'Viewer connected! Streaming...';
           });
