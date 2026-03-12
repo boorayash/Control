@@ -2,11 +2,153 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>Host Agent</title>
+    <title>Host Agent Dashboard</title>
+    <style>
+      :root {
+        --bg: #020617;
+        --card: #0f172a;
+        --primary: #3b82f6;
+        --text: #f8fafc;
+        --text-dim: #94a3b8;
+        --emerald: #10b981;
+      }
+      body {
+        margin: 0;
+        font-family: 'Inter', -apple-system, sans-serif;
+        background-color: var(--bg);
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .dashboard {
+        width: 100%;
+        max-width: 320px;
+        padding: 24px;
+        background: var(--card);
+        border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.05);
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+      }
+      .header h1 {
+        font-size: 14px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin: 0;
+        color: var(--text-dim);
+      }
+      .status-pill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 99px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #ef4444;
+      }
+      .dot.active {
+        background: var(--emerald);
+        box-shadow: 0 0 8px var(--emerald);
+      }
+      .control-panel {
+        background: rgba(255,255,255,0.02);
+        padding: 16px;
+        border-radius: 12px;
+        margin-bottom: 12px;
+      }
+      .toggle-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .toggle-label {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+      }
+      .switch input { opacity: 0; width: 0; height: 0; }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #334155;
+        transition: .4s;
+        border-radius: 34px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px; width: 18px;
+        left: 3px; bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+      }
+      input:checked + .slider { background-color: var(--primary); }
+      input:checked + .slider:before { transform: translateX(20px); }
+      
+      .info-row {
+        font-size: 11px;
+        color: var(--text-dim);
+        margin-top: 16px;
+        text-align: center;
+      }
+      #status-msg {
+        font-weight: 600;
+        color: var(--text);
+        display: block;
+        margin-top: 4px;
+      }
+    </style>
   </head>
   <body>
-    <h1>Host Agent</h1>
-    <p id="status">Waiting for connection...</p>
+    <div class="dashboard">
+      <div class="header">
+        <h1>Antigravity</h1>
+        <div class="status-pill">
+          <div id="status-dot" class="dot"></div>
+          <span id="status-text">Ready</span>
+        </div>
+      </div>
+
+      <div class="control-panel">
+        <div class="toggle-row">
+          <span class="toggle-label">Remote Control</span>
+          <label class="switch">
+            <input type="checkbox" id="control-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="info-row">
+        Connection Status
+        <span id="status-msg">Searching for host...</span>
+      </div>
+    </div>
     
     <script>
       const { ipcRenderer } = require('electron');
@@ -15,16 +157,32 @@
 
       const socket = io('http://localhost:3000');
       let peer;
+      let localStream;
 
-      // Handle older Node.js events implementation expectation from simple-peer
-      process.on('uncaughtException', err => {
-        console.error('Unhandled Exception:', err);
+      const controlToggle = document.getElementById('control-toggle');
+      const statusText = document.getElementById('status-text');
+      const statusDot = document.getElementById('status-dot');
+      const statusMsg = document.getElementById('status-msg');
+
+      // Update control state in main process
+      controlToggle.addEventListener('change', (e) => {
+        ipcRenderer.send('update-permissions', { allowControl: e.target.checked });
       });
+
+      function updateStatus(text, isActive = false) {
+        statusMsg.innerText = text;
+        if (isActive) {
+          statusDot.classList.add('active');
+          statusText.innerText = 'Online';
+        } else {
+          statusDot.classList.remove('active');
+          statusText.innerText = 'Ready';
+        }
+      }
 
       ipcRenderer.on('set-source', async (event, sourceId) => {
         try {
-          // Note: using the older constraints format for electron desktopCapturer
-          const stream = await navigator.mediaDevices.getUserMedia({
+          localStream = await navigator.mediaDevices.getUserMedia({
             audio: false,
             video: {
               mandatory: {
@@ -33,52 +191,55 @@
               }
             }
           });
-          
-          document.getElementById('status').innerText = 'Screen captured. Waiting for viewer...';
-
-          // Initialize WebRTC Peer as the initiator
-          peer = new SimplePeer({
-            initiator: true,
-            stream: stream,
-            trickle: true 
-          });
-
-          // Forward WebRTC signaling data to the Node.js server
-          peer.on('signal', data => {
-            socket.emit('signal', data);
-          });
-
-          // Receive WebRTC signaling data from the Node.js server
-          socket.on('signal', data => {
-            peer.signal(data);
-          });
-
-          // Relay input control events to main process
-          socket.on('mouse-move', data => {
-            ipcRenderer.send('mouse-move', data);
-          });
-
-          socket.on('mouse-click', data => {
-            ipcRenderer.send('mouse-click', data);
-          });
-
-          socket.on('key-event', data => {
-            ipcRenderer.send('key-event', data);
-          });
-
-          peer.on('connect', () => {
-            document.getElementById('status').innerText = 'Viewer connected! Streaming...';
-          });
-
-          peer.on('error', err => {
-            console.error('Peer error:', err);
-            document.getElementById('status').innerText = 'Connection error.';
-          });
-
+          updateStatus('Awaiting Viewer...');
         } catch (e) {
           console.error('Stream Setup Error:', e);
-          document.getElementById('status').innerText = 'Error capturing screen: ' + e.message;
+          updateStatus('Capture Failed');
         }
+      });
+
+      socket.on('viewer-joined', () => {
+        if (!localStream) return;
+        if (peer) peer.destroy();
+        
+        updateStatus('Connecting...');
+
+        peer = new SimplePeer({
+          initiator: true,
+          stream: localStream,
+          trickle: true,
+          config: { iceServers: [] }
+        });
+
+        peer.on('signal', data => {
+          socket.emit('signal', data);
+        });
+
+        peer.on('connect', () => {
+          updateStatus('Streaming Live', true);
+        });
+
+        peer.on('error', err => {
+          console.error('Peer error:', err);
+          updateStatus('Connection Error');
+        });
+      });
+
+      socket.on('signal', data => {
+        if (peer) peer.signal(data);
+      });
+
+      // Relay input control events to main process
+      socket.on('mouse-move', data => {
+        ipcRenderer.send('mouse-move', data);
+      });
+
+      socket.on('mouse-click', data => {
+        ipcRenderer.send('mouse-click', data);
+      });
+
+      socket.on('key-event', data => {
+        ipcRenderer.send('key-event', data);
       });
     </script>
   </body>

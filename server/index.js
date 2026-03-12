@@ -22,6 +22,24 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('signal', data);
   });
 
+  // Relay Remote Control events
+  socket.on('mouse-move', (data) => {
+    socket.broadcast.emit('mouse-move', data);
+  });
+
+  socket.on('mouse-click', (data) => {
+    socket.broadcast.emit('mouse-click', data);
+  });
+
+  socket.on('key-event', (data) => {
+    socket.broadcast.emit('key-event', data);
+  });
+
+  socket.on('join', () => {
+    console.log(`[Signaling Server] Viewer joined: ${socket.id}`);
+    socket.broadcast.emit('viewer-joined');
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Signaling Server] Client disconnected: ${socket.id}`);
   });
