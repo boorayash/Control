@@ -10,16 +10,86 @@ function App() {
   const peerRef = useRef(null)
   const lastMoveRef = useRef(0)
 
+  const getNormalizedCoords = (e) => {
+    if (!videoRef.current) return null;
+    
+    const rect = videoRef.current.getBoundingClientRect();
+    const videoWidth = videoRef.current.videoWidth;
+    const videoHeight = videoRef.current.videoHeight;
+    
+    if (!videoWidth || !videoHeight) return null;
+    
+    const containerRatio = rect.width / rect.height;
+    const videoRatio = videoWidth / videoHeight;
+    
+    let actualWidth, actualHeight, offsetX, offsetY;
+    
+    if (containerRatio > videoRatio) {
+      actualHeight = rect.height;
+      actualWidth = rect.height * videoRatio;
+      offsetX = (rect.width - actualWidth) / 2;
+      offsetY = 0;
+    } else {
+      actualWidth = rect.width;
+      actualHeight = rect.height / videoRatio;
+      offsetX = 0;
+      offsetY = (rect.height - actualHeight) / 2;
+    }
+    
+    const relativeX = e.clientX - rect.left - offsetX;
+    const relativeY = e.clientY - rect.top - offsetY;
+    
+    const x = Math.max(0, Math.min(1, relativeX / actualWidth));
+    const y = Math.max(0, Math.min(1, relativeY / actualHeight));
+    
+    return { x, y };
+  };
+
+  const handleMouseMove = (e) => {
+    const now = Date.now();
+    if (now - lastMoveRef.current < 16) return;
+    lastMoveRef.current = now;
+
+    const coords = getNormalizedCoords(e);
+    if (coords) {
+      socket.emit('mouse-move', coords);
+    }
+  };
+
+  const handleMouseDown = (e) => {
+    const coords = getNormalizedCoords(e);
+    if (coords) {
+      socket.emit('mouse-click', { ...coords, button: e.button === 2 ? 'right' : 'left', action: 'down' });
+    }
+  };
+
+  const handleMouseUp = (e) => {
+    const coords = getNormalizedCoords(e);
+    if (coords) {
+      socket.emit('mouse-click', { ...coords, button: e.button === 2 ? 'right' : 'left', action: 'up' });
+    }
+  };
+
   useEffect(() => {
-    socket.emit('join')
+    const roomId = 'default-room'
+    socket.emit('join-room', roomId)
+    
+    // Explicitly notify the agent that we are ready to receive an offer
+    setTimeout(() => {
+      socket.emit('viewer-ready')
+    }, 500)
 
     socket.on('signal', (data) => {
-      if (!peerRef.current) {
-        setStatus('Incoming signal. Creating peer...')
+      if (!peerRef.current || peerRef.current.destroyed) {
+        setStatus('Initializing stream...')
         const peer = new SimplePeer({
           initiator: false,
           trickle: true,
-          config: { iceServers: [] }
+          config: { 
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' }
+            ] 
+          }
         })
 
         peer.on('signal', signalData => {
@@ -39,51 +109,31 @@ function App() {
 
         peer.on('error', err => {
           console.error("Peer error:", err)
-          setStatus('Connection error.')
+          setStatus('Connection failure. Retrying...')
+          // Auto-destroy on error to allow clean restart
+          peer.destroy()
+        })
+
+        peer.on('close', () => {
+          peerRef.current = null
         })
 
         peerRef.current = peer
       }
       
-      peerRef.current.signal(data)
+      try {
+        peerRef.current.signal(data)
+      } catch (e) {
+        console.error("Signal error:", e)
+      }
     })
 
-    const handleMouseMove = (e) => {
-      const now = Date.now()
-      if (now - lastMoveRef.current < 16) return // ~60fps throttling
-      lastMoveRef.current = now
-
-      if (!videoRef.current) return
-      const rect = videoRef.current.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width
-      const y = (e.clientY - rect.top) / rect.height
-      
-      socket.emit('mouse-move', { x, y })
-    }
-
-    const handleMouseDown = (e) => {
-      if (!videoRef.current) return
-      const rect = videoRef.current.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width
-      const y = (e.clientY - rect.top) / rect.height
-      socket.emit('mouse-click', { x, y, button: e.button === 2 ? 'right' : 'left', action: 'down' })
-    }
-
-    const handleMouseUp = (e) => {
-      if (!videoRef.current) return
-      const rect = videoRef.current.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width
-      const y = (e.clientY - rect.top) / rect.height
-      socket.emit('mouse-click', { x, y, button: e.button === 2 ? 'right' : 'left', action: 'up' })
-    }
-
     const handleKeyDown = (e) => {
-      // Prevent default behavior for potential conflicting hotkeys only when focused
-      socket.emit('key-event', { key: e.key, action: 'down', shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey })
+      socket.emit('key-event', { key: e.key, action: 'down' })
     }
 
     const handleKeyUp = (e) => {
-      socket.emit('key-event', { key: e.key, action: 'up', shift: e.shiftKey, ctrl: e.ctrlKey, meta: e.metaKey })
+      socket.emit('key-event', { key: e.key, action: 'up' })
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -105,27 +155,9 @@ function App() {
         autoPlay 
         playsInline 
         muted 
-        onMouseMove={(e) => {
-          const now = Date.now()
-          if (now - lastMoveRef.current < 16) return 
-          lastMoveRef.current = now
-          const rect = e.currentTarget.getBoundingClientRect()
-          const x = (e.clientX - rect.left) / rect.width
-          const y = (e.clientY - rect.top) / rect.height
-          socket.emit('mouse-move', { x, y })
-        }}
-        onMouseDown={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect()
-          const x = (e.clientX - rect.left) / rect.width
-          const y = (e.clientY - rect.top) / rect.height
-          socket.emit('mouse-click', { x, y, button: e.button === 2 ? 'right' : 'left', action: 'down' })
-        }}
-        onMouseUp={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect()
-          const x = (e.clientX - rect.left) / rect.width
-          const y = (e.clientY - rect.top) / rect.height
-          socket.emit('mouse-click', { x, y, button: e.button === 2 ? 'right' : 'left', action: 'up' })
-        }}
+        onMouseMove={handleMouseMove}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
         onContextMenu={(e) => e.preventDefault()}
       />
       

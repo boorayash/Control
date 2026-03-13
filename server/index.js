@@ -16,28 +16,48 @@ const io = new Server(httpServer, {
 });
 
 io.on('connection', (socket) => {
-  console.log(`[Signaling Server] Client connected: ${socket.id}`);
+  let currentRoom = null;
 
-  socket.on('signal', (data) => {
-    socket.broadcast.emit('signal', data);
+  socket.on('join-room', (roomId) => {
+    if (currentRoom) socket.leave(currentRoom);
+    currentRoom = roomId;
+    socket.join(roomId);
+    console.log(`[Signaling Server] ${socket.id} joined: ${roomId}`);
+    
+    // Notify EXPLAIN-WHY: Using broadcast to room ensures the other peer knows to start signaling
+    socket.to(roomId).emit('viewer-joined');
   });
 
-  // Relay Remote Control events
+  socket.on('viewer-ready', () => {
+    if (currentRoom) {
+      console.log(`[Signaling Server] Viewer in ${currentRoom} is ready.`);
+      socket.to(currentRoom).emit('viewer-ready');
+    }
+  });
+
+  socket.on('signal', (data) => {
+    if (currentRoom) {
+      socket.to(currentRoom).emit('signal', data);
+    }
+  });
+
+  // Relay Remote Control events per-room
   socket.on('mouse-move', (data) => {
-    socket.broadcast.emit('mouse-move', data);
+    if (currentRoom) {
+      socket.to(currentRoom).emit('mouse-move', data);
+    }
   });
 
   socket.on('mouse-click', (data) => {
-    socket.broadcast.emit('mouse-click', data);
+    if (currentRoom) {
+      socket.to(currentRoom).emit('mouse-click', data);
+    }
   });
 
   socket.on('key-event', (data) => {
-    socket.broadcast.emit('key-event', data);
-  });
-
-  socket.on('join', () => {
-    console.log(`[Signaling Server] Viewer joined: ${socket.id}`);
-    socket.broadcast.emit('viewer-joined');
+    if (currentRoom) {
+      socket.to(currentRoom).emit('key-event', data);
+    }
   });
 
   socket.on('disconnect', () => {

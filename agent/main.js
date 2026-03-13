@@ -73,19 +73,26 @@ ipcMain.on('mouse-click', async (event, data) => {
 
 // Improved key mapping
 const keyMap = {
-  'Enter': Key.Enter,
-  'Backspace': Key.Backspace,
-  'Tab': Key.Tab,
-  'Escape': Key.Escape,
+  'enter': Key.Enter,
+  'backspace': Key.Backspace,
+  'tab': Key.Tab,
+  'escape': Key.Escape,
   ' ': Key.Space,
-  'ArrowUp': Key.Up,
-  'ArrowDown': Key.Down,
-  'ArrowLeft': Key.Left,
-  'ArrowRight': Key.Right,
-  'Control': Key.LeftControl,
-  'Shift': Key.LeftShift,
-  'Alt': Key.LeftAlt,
-  'Meta': Key.LeftSuper,
+  'arrowup': Key.Up,
+  'arrowdown': Key.Down,
+  'arrowleft': Key.Left,
+  'arrowright': Key.Right,
+  'control': Key.LeftControl,
+  'shift': Key.LeftShift,
+  'alt': Key.LeftAlt,
+  'meta': Key.LeftSuper,
+  // Numbers & Symbols (Primary)
+  '0': Key.Num0, '1': Key.Num1, '2': Key.Num2, '3': Key.Num3, '4': Key.Num4,
+  '5': Key.Num5, '6': Key.Num6, '7': Key.Num7, '8': Key.Num8, '9': Key.Num9,
+  '-': Key.Minus, '=': Key.Equal, '[': Key.LeftBracket, ']': Key.RightBracket,
+  ';': Key.Semicolon, "'": Key.Quote, ',': Key.Comma, '.': Key.Period, '/': Key.Slash,
+  '\\': Key.Backslash, '`': Key.Grave,
+  // Alphabet
   'a': Key.A, 'b': Key.B, 'c': Key.C, 'd': Key.D, 'e': Key.E, 'f': Key.F, 'g': Key.G,
   'h': Key.H, 'i': Key.I, 'j': Key.J, 'k': Key.K, 'l': Key.L, 'm': Key.M, 'n': Key.N,
   'o': Key.O, 'p': Key.P, 'q': Key.Q, 'r': Key.R, 's': Key.S, 't': Key.T, 'u': Key.U,
@@ -95,11 +102,25 @@ const keyMap = {
 ipcMain.on('key-event', async (event, data) => {
   if (!allowControl) return;
   try {
-    const key = keyMap[data.key.toLowerCase()] || data.key;
-    if (data.action === 'down') {
-      await keyboard.pressKey(key);
-    } else {
-      await keyboard.releaseKey(key);
+    const rawKey = data.key.toLowerCase();
+    const key = keyMap[rawKey];
+    
+    if (key !== undefined) {
+      if (data.action === 'down') {
+        try {
+          await keyboard.pressKey(key);
+        } catch (err) {
+          console.warn(`[Agent] pressKey failed for ${rawKey}:`, err.message);
+          // Fallback to type if pressKey fails for certain keys
+          if (data.key.length === 1) await keyboard.type(data.key);
+        }
+      } else {
+        try {
+          await keyboard.releaseKey(key);
+        } catch (err) { /* ignore release errors */ }
+      }
+    } else if (data.action === 'down' && data.key.length === 1) {
+      await keyboard.type(data.key);
     }
   } catch (e) {
     console.error("[Agent] Key event error:", e);
