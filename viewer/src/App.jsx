@@ -5,79 +5,51 @@ import SimplePeer from 'simple-peer'
 const socket = io('http://localhost:3000')
 
 function App() {
-  const [status, setStatus] = useState('Waiting for connection...')
+  const [view, setView] = useState('landing') // 'landing' | 'session'
+  const [status, setStatus] = useState('Waiting for host...')
+  const [roomId, setRoomId] = useState('')
+  const [error, setError] = useState('')
+  const [hostStatus, setHostStatus] = useState(null) // null | 'checking' | 'online' | 'offline'
+  
   const videoRef = useRef(null)
   const peerRef = useRef(null)
   const lastMoveRef = useRef(0)
 
-  const getNormalizedCoords = (e) => {
-    if (!videoRef.current) return null;
-    
-    const rect = videoRef.current.getBoundingClientRect();
-    const videoWidth = videoRef.current.videoWidth;
-    const videoHeight = videoRef.current.videoHeight;
-    
-    if (!videoWidth || !videoHeight) return null;
-    
-    const containerRatio = rect.width / rect.height;
-    const videoRatio = videoWidth / videoHeight;
-    
-    let actualWidth, actualHeight, offsetX, offsetY;
-    
-    if (containerRatio > videoRatio) {
-      actualHeight = rect.height;
-      actualWidth = rect.height * videoRatio;
-      offsetX = (rect.width - actualWidth) / 2;
-      offsetY = 0;
-    } else {
-      actualWidth = rect.width;
-      actualHeight = rect.height / videoRatio;
-      offsetX = 0;
-      offsetY = (rect.height - actualHeight) / 2;
-    }
-    
-    const relativeX = e.clientX - rect.left - offsetX;
-    const relativeY = e.clientY - rect.top - offsetY;
-    
-    const x = Math.max(0, Math.min(1, relativeX / actualWidth));
-    const y = Math.max(0, Math.min(1, relativeY / actualHeight));
-    
-    return { x, y };
+  const checkHostStatus = (code) => {
+    if (!code.trim()) return;
+    setHostStatus('checking');
+    socket.emit('check-room-status', code.trim(), (response) => {
+      setHostStatus(response.online ? 'online' : 'offline');
+    });
   };
 
-  const handleMouseMove = (e) => {
-    const now = Date.now();
-    if (now - lastMoveRef.current < 16) return;
-    lastMoveRef.current = now;
-
-    const coords = getNormalizedCoords(e);
-    if (coords) {
-      socket.emit('mouse-move', coords);
-    }
-  };
-
-  const handleMouseDown = (e) => {
-    const coords = getNormalizedCoords(e);
-    if (coords) {
-      socket.emit('mouse-click', { ...coords, button: e.button === 2 ? 'right' : 'left', action: 'down' });
-    }
-  };
-
-  const handleMouseUp = (e) => {
-    const coords = getNormalizedCoords(e);
-    if (coords) {
-      socket.emit('mouse-click', { ...coords, button: e.button === 2 ? 'right' : 'left', action: 'up' });
-    }
+  const handleJoin = (e) => {
+    e?.preventDefault();
+    const code = roomId.trim();
+    if (!code) return setError('Please enter a valid Room ID');
+    setError('');
+    setHostStatus('checking');
+    socket.emit('check-room-status', code, (response) => {
+      if (response.online) {
+        setHostStatus('online');
+        setView('session');
+        setStatus('Negotiating connection...');
+      } else {
+        setHostStatus('offline');
+        setError('Host is offline. Make sure the Agent is running.');
+      }
+    });
   };
 
   useEffect(() => {
-    const roomId = 'default-room'
+    if (view !== 'session') return;
+
     socket.emit('join-room', roomId)
     
     // Explicitly notify the agent that we are ready to receive an offer
-    setTimeout(() => {
+    const readyTimer = setTimeout(() => {
       socket.emit('viewer-ready')
-    }, 500)
+    }, 1000)
 
     socket.on('signal', (data) => {
       if (!peerRef.current || peerRef.current.destroyed) {
@@ -86,9 +58,7 @@ function App() {
           initiator: false,
           trickle: true,
           config: { 
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' }
-            ] 
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] 
           }
         })
 
@@ -110,7 +80,6 @@ function App() {
         peer.on('error', err => {
           console.error("Peer error:", err)
           setStatus('Connection failure. Retrying...')
-          // Auto-destroy on error to allow clean restart
           peer.destroy()
         })
 
@@ -128,24 +97,180 @@ function App() {
       }
     })
 
-    const handleKeyDown = (e) => {
-      socket.emit('key-event', { key: e.key, action: 'down' })
-    }
-
-    const handleKeyUp = (e) => {
-      socket.emit('key-event', { key: e.key, action: 'up' })
-    }
+    const handleKeyDown = (e) => socket.emit('key-event', { key: e.key, action: 'down' })
+    const handleKeyUp = (e) => socket.emit('key-event', { key: e.key, action: 'up' })
 
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
 
     return () => {
+      clearTimeout(readyTimer)
       socket.off('signal')
       if (peerRef.current) peerRef.current.destroy()
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [])
+  }, [view, roomId])
+
+  // Coordinate Mapping logic (same as before)
+  const getNormalizedCoords = (e) => {
+    if (!videoRef.current) return null;
+    const rect = videoRef.current.getBoundingClientRect();
+    const videoWidth = videoRef.current.videoWidth;
+    const videoHeight = videoRef.current.videoHeight;
+    if (!videoWidth || !videoHeight) return null;
+    const containerRatio = rect.width / rect.height;
+    const videoRatio = videoWidth / videoHeight;
+    let actualWidth, actualHeight, offsetX, offsetY;
+    if (containerRatio > videoRatio) {
+      actualHeight = rect.height;
+      actualWidth = rect.height * videoRatio;
+      offsetX = (rect.width - actualWidth) / 2;
+      offsetY = 0;
+    } else {
+      actualWidth = rect.width;
+      actualHeight = rect.height / videoRatio;
+      offsetX = 0;
+      offsetY = (rect.height - actualHeight) / 2;
+    }
+    const relativeX = e.clientX - rect.left - offsetX;
+    const relativeY = e.clientY - rect.top - offsetY;
+    const x = Math.max(0, Math.min(1, relativeX / actualWidth));
+    const y = Math.max(0, Math.min(1, relativeY / actualHeight));
+    return { x, y };
+  };
+
+  const handleMouseMove = (e) => {
+    const now = Date.now();
+    if (now - lastMoveRef.current < 16) return;
+    lastMoveRef.current = now;
+    const coords = getNormalizedCoords(e);
+    if (coords) socket.emit('mouse-move', coords);
+  };
+
+  const handleMouseDown = (e) => {
+    const coords = getNormalizedCoords(e);
+    if (coords) socket.emit('mouse-click', { ...coords, button: e.button === 2 ? 'right' : 'left', action: 'down' });
+  };
+
+  const handleMouseUp = (e) => {
+    const coords = getNormalizedCoords(e);
+    if (coords) socket.emit('mouse-click', { ...coords, button: e.button === 2 ? 'right' : 'left', action: 'up' });
+  };
+
+  if (view === 'landing') {
+    return (
+      <div className="fixed inset-0 bg-[#020617] flex items-center justify-center p-6 font-sans selection:bg-blue-500/30 overflow-y-auto">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(17,24,39,1)_0%,rgba(2,6,23,1)_100%)]" />
+        
+        <main className="relative z-10 w-full max-w-5xl space-y-16 py-12">
+          {/* Hero */}
+          <div className="text-center space-y-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-widest">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+              </span>
+              v1.1 Stable
+            </div>
+            <h1 className="text-7xl font-black tracking-tighter text-white leading-none">
+              CONTROL<span className="text-blue-500">.</span>
+            </h1>
+            <p className="text-slate-400 text-lg max-w-lg mx-auto leading-relaxed">
+              Ultra-low latency remote desktop for the modern web. Direct peer-to-peer streaming with native speed.
+            </p>
+          </div>
+
+          {/* How It Works */}
+          <div className="grid grid-cols-3 gap-6 max-w-3xl mx-auto">
+            {[
+              { step: '01', title: 'Download Agent', desc: 'Install and run the Host Agent on the computer you want to share.' },
+              { step: '02', title: 'Share Code', desc: 'Copy the permanent Access Code displayed on the Agent dashboard.' },
+              { step: '03', title: 'Connect', desc: 'Enter the code here and get instant, secure access to the remote screen.' },
+            ].map((item) => (
+              <div key={item.step} className="text-center p-6 bg-white/[0.02] rounded-2xl border border-white/5 space-y-3">
+                <div className="text-blue-500 text-3xl font-black opacity-40">{item.step}</div>
+                <h4 className="text-white font-bold text-sm">{item.title}</h4>
+                <p className="text-slate-500 text-xs leading-relaxed">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Two Column: Download + Join */}
+          <div className="grid md:grid-cols-2 gap-8 items-start max-w-4xl mx-auto">
+            {/* Left: Download */}
+            <div className="space-y-4">
+              <h3 className="text-white font-bold text-sm uppercase tracking-widest">Share this computer</h3>
+              <div className="group relative p-6 bg-slate-900/40 backdrop-blur-3xl rounded-3xl border border-white/5 hover:border-blue-500/30 transition-all duration-500 overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-20 transition-opacity">
+                  <svg className="w-24 h-24" fill="white" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                </div>
+                <p className="text-slate-400 text-sm mb-6 relative z-10">Download the Host Agent, run it, and share your permanent Access Code with the viewer.</p>
+                <a href="http://localhost:3000/public/downloads/ControlAgent.exe" download className="relative z-10 w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-sm shadow-[0_10px_40px_-10px_rgba(37,99,235,0.4)] transition-all active:scale-[0.98] block text-center">
+                  Download Host Agent (.exe)
+                </a>
+              </div>
+            </div>
+
+            {/* Right: Join Session */}
+            <div className="space-y-4">
+              <h3 className="text-white font-bold text-sm uppercase tracking-widest">Access remote screen</h3>
+              <div className="p-8 bg-white/5 backdrop-blur-2xl rounded-[2.5rem] border border-white/10 shadow-2xl relative overflow-hidden group">
+                <div className="absolute -top-24 -right-24 w-48 h-48 bg-blue-500/20 blur-[100px] rounded-full group-hover:bg-blue-500/30 transition-colors" />
+                
+                <form onSubmit={handleJoin} className="space-y-6 relative z-10">
+                  <div className="space-y-3">
+                    <label className="block text-slate-400 text-xs font-bold uppercase tracking-widest px-1">Access Code</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. CTL-A7X9K2"
+                      value={roomId}
+                      onChange={(e) => {
+                        setRoomId(e.target.value.toUpperCase());
+                        setError('');
+                        setHostStatus(null);
+                      }}
+                      onBlur={() => checkHostStatus(roomId)}
+                      className="w-full bg-black/40 border border-white/10 rounded-2xl px-6 py-5 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 transition-all text-lg font-mono tracking-wider"
+                    />
+                    {/* Host Status Indicator */}
+                    {hostStatus && (
+                      <div className={`flex items-center gap-2 px-1 text-xs font-semibold ${
+                        hostStatus === 'online' ? 'text-emerald-400' :
+                        hostStatus === 'offline' ? 'text-rose-400' :
+                        'text-slate-400'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          hostStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' :
+                          hostStatus === 'offline' ? 'bg-rose-500' :
+                          'bg-slate-500 animate-pulse'
+                        }`} />
+                        {hostStatus === 'checking' && 'Checking host...'}
+                        {hostStatus === 'online' && 'Host is online'}
+                        {hostStatus === 'offline' && 'Host is offline'}
+                      </div>
+                    )}
+                    {error && <p className="text-rose-500 text-xs font-medium pl-1">{error}</p>}
+                  </div>
+
+                  <div className="space-y-4">
+                    <button type="submit" className="w-full py-5 bg-white text-black rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-colors active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed" disabled={hostStatus === 'checking'}>
+                      {hostStatus === 'checking' ? 'Checking...' : 'Join Session'}
+                    </button>
+                    <p className="text-center text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-loose">
+                      Direct P2P • Encrypted • 60 FPS
+                    </p>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <div className="absolute bottom-0 left-0 w-full h-1/3 bg-gradient-to-t from-blue-500/5 to-transparent pointer-events-none" />
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-[#020617] overflow-hidden flex items-center justify-center select-none touch-none font-sans antialiased text-slate-200">
@@ -170,9 +295,18 @@ function App() {
               <div className="absolute inset-4 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full blur-lg opacity-20"></div>
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold tracking-tight text-white">Connecting...</h2>
-              <p className="text-slate-400 text-sm leading-relaxed">{status}</p>
+              <h2 className="text-2xl font-bold tracking-tight text-white uppercase tracking-wider">{status === 'Initializing stream...' ? 'Establishing Bridge' : 'Connecting...'}</h2>
+              <p className="text-slate-400 text-sm leading-relaxed font-medium">{status}</p>
             </div>
+            <button 
+              onClick={() => {
+                if (peerRef.current) peerRef.current.destroy();
+                setView('landing');
+              }}
+              className="px-6 py-2 border border-white/10 rounded-full text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+            >
+              Cancel Attempt
+            </button>
           </div>
         </div>
       )}
@@ -186,7 +320,7 @@ function App() {
       </div>
 
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-2.5 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 text-[10px] text-slate-400 uppercase tracking-[0.2em] font-extrabold flex gap-6 pointer-events-none opacity-40 hover:opacity-100 transition-all duration-300 z-40 group">
-        <span className="group-hover:text-blue-400 transition-colors">Remote Interaction Enabled</span>
+        <span className="group-hover:text-blue-400 transition-colors">Room: {roomId}</span>
         <span className="w-px h-3 bg-white/10 self-center"></span>
         <span className="group-hover:text-indigo-400 transition-colors">60 FPS Ultra Low Latency</span>
       </div>

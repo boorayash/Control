@@ -122,6 +122,63 @@
         display: block;
         margin-top: 4px;
       }
+      .room-display {
+        background: rgba(59,130,246,0.08);
+        border: 1px solid rgba(59,130,246,0.15);
+        padding: 16px;
+        border-radius: 12px;
+        margin-bottom: 12px;
+        text-align: center;
+        position: relative;
+      }
+      .room-label {
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        color: var(--text-dim);
+        margin-bottom: 8px;
+      }
+      .room-code-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+      .room-code {
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        color: #60a5fa;
+        font-family: 'Consolas', 'Courier New', monospace;
+      }
+      .copy-btn {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        color: var(--text-dim);
+        border-radius: 8px;
+        padding: 6px 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+      }
+      .copy-btn:hover {
+        background: rgba(59,130,246,0.15);
+        color: #60a5fa;
+        border-color: rgba(59,130,246,0.3);
+      }
+      .copy-feedback {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--emerald);
+        margin-top: 6px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .copy-feedback.show {
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
@@ -132,6 +189,18 @@
           <div id="status-dot" class="dot"></div>
           <span id="status-text">Ready</span>
         </div>
+      </div>
+
+      <!-- Room ID Display -->
+      <div class="room-display">
+        <div class="room-label">Your Access Code</div>
+        <div class="room-code-row">
+          <span id="room-code" class="room-code">Loading...</span>
+          <button id="copy-btn" class="copy-btn" title="Copy to clipboard">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+        <div id="copy-feedback" class="copy-feedback">Copied!</div>
       </div>
 
       <div class="control-panel">
@@ -146,7 +215,7 @@
 
       <div class="info-row">
         Connection Status
-        <span id="status-msg">Searching for host...</span>
+        <span id="status-msg">Initializing...</span>
       </div>
     </div>
     
@@ -158,15 +227,30 @@
       const socket = io('http://localhost:3000');
       let peer;
       let localStream;
-      const roomId = 'default-room';
+      let roomId = null;
 
       const controlToggle = document.getElementById('control-toggle');
       const statusText = document.getElementById('status-text');
       const statusDot = document.getElementById('status-dot');
       const statusMsg = document.getElementById('status-msg');
+      const roomCodeEl = document.getElementById('room-code');
+      const copyBtn = document.getElementById('copy-btn');
+      const copyFeedback = document.getElementById('copy-feedback');
 
-      socket.emit('join-room', roomId);
-      console.log('[Agent] Attempting to join room:', roomId);
+      // Receive Room ID from main process
+      ipcRenderer.on('set-room-id', (event, id) => {
+        roomId = id;
+        roomCodeEl.textContent = id;
+        socket.emit('join-room', roomId);
+        console.log('[Agent] Room ID set:', roomId);
+      });
+
+      // Copy button
+      copyBtn.addEventListener('click', () => {
+        ipcRenderer.send('copy-room-id');
+        copyFeedback.classList.add('show');
+        setTimeout(() => copyFeedback.classList.remove('show'), 1500);
+      });
 
       // Update control state in main process
       controlToggle.addEventListener('change', (e) => {
@@ -185,8 +269,11 @@
       }
 
       socket.on('connect', () => {
-        console.log('[Agent] Socket connected! Joining room:', roomId);
-        socket.emit('join-room', roomId);
+        console.log('[Agent] Socket connected!');
+        if (roomId) {
+          socket.emit('join-room', roomId);
+          socket.emit('agent-online', roomId);
+        }
       });
 
       ipcRenderer.on('set-source', async (event, sourceId) => {
@@ -200,8 +287,8 @@
               }
             }
           });
-          updateStatus('Secure Session Active');
-          console.log('[Agent] Media captured, awaiting viewer signal...');
+          updateStatus('Awaiting Viewer');
+          console.log('[Agent] Media captured, awaiting viewer...');
         } catch (e) {
           console.error('Stream Setup Error:', e);
           updateStatus('Capture Failed');

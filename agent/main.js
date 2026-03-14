@@ -1,18 +1,60 @@
-const { app, BrowserWindow, desktopCapturer, ipcMain, screen } = require('electron')
+const { app, BrowserWindow, desktopCapturer, ipcMain, screen, clipboard } = require('electron')
 const path = require('path')
+const fs = require('fs')
+const crypto = require('crypto')
 const { mouse, keyboard, Point, Button, Key } = require("@mintplex-labs/nut-js")
 
 let mainWindow;
 let allowControl = false; // Permission gate
+let roomId = null;
 
 // Disable visual feedback for performance
 mouse.config.mouseSpeed = 10000;
 keyboard.config.autoDelayMs = 0;
 
+// --- Persistent Room ID ---
+function getConfigPath() {
+  return path.join(app.getPath('userData'), 'control-config.json');
+}
+
+function loadOrCreateRoomId() {
+  const configPath = getConfigPath();
+  try {
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config.roomId) {
+        console.log(`[Agent] Loaded Room ID: ${config.roomId}`);
+        return config.roomId;
+      }
+    }
+  } catch (e) {
+    console.error('[Agent] Config read error, regenerating:', e.message);
+  }
+  // Generate a new permanent ID: CTL-XXXXXX
+  const id = 'CTL-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+  try {
+    fs.writeFileSync(configPath, JSON.stringify({ roomId: id }, null, 2));
+    console.log(`[Agent] Generated new Room ID: ${id}`);
+  } catch (e) {
+    console.error('[Agent] Config save error:', e.message);
+  }
+  return id;
+}
+
+// Copy Room ID to clipboard
+ipcMain.on('copy-room-id', () => {
+  if (roomId) {
+    clipboard.writeText(roomId);
+    console.log('[Agent] Room ID copied to clipboard');
+  }
+});
+
 function createWindow () {
+  roomId = loadOrCreateRoomId();
+
   mainWindow = new BrowserWindow({
     width: 360,
-    height: 380,
+    height: 460,
     resizable: false,
     autoHideMenuBar: true,
     backgroundColor: '#020617',
@@ -25,6 +67,9 @@ function createWindow () {
   mainWindow.loadFile('index.html')
 
   mainWindow.webContents.on('did-finish-load', async () => {
+    // Send room ID first
+    mainWindow.webContents.send('set-room-id', roomId);
+    
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
     if (sources.length > 0) {
       mainWindow.webContents.send('set-source', sources[0].id);
