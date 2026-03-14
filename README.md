@@ -132,9 +132,3 @@ screen/
     ├── src/App.jsx    # Landing page + WebRTC session
     └── src/index.css  # Global styles + Inter font
 ```
-
----
-
-## 📄 License
-
-MIT
