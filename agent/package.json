@@ -5,15 +5,29 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "dist": "electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "build": {
+    "appId": "com.control.agent",
+    "productName": "ControlAgent",
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
   "keywords": [],
-  "author": "",
+  "author": "Control Team",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
     "buffer": "^6.0.3",
     "electron": "^41.0.0",
+    "electron-builder": "^26.8.1",
     "events": "^3.3.0",
     "process": "^0.11.10"
   },
