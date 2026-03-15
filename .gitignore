@@ -8,3 +8,4 @@ node_modules
 .planning
 agent/dist/
 server/public/downloads/
+server/debug.log

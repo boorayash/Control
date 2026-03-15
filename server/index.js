@@ -4,9 +4,17 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const logFile = path.join(__dirname, 'debug.log');
+const log = (msg) => {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  fs.appendFileSync(logFile, line);
+  console.log(msg);
+};
 
 const app = express();
 app.use(cors());
@@ -16,8 +24,10 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin: "*",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["ngrok-skip-browser-warning"],
+    credentials: true
   }
 });
 
@@ -26,27 +36,33 @@ const activeAgents = new Map(); // roomId -> socketId
 
 io.on('connection', (socket) => {
   let currentRoom = null;
+  log(`New connection: ${socket.id}`);
 
   socket.on('join-room', (roomId) => {
+    log(`join-room attempt: ${socket.id} for ${roomId}`);
     if (currentRoom) socket.leave(currentRoom);
     currentRoom = roomId;
     socket.join(roomId);
-    console.log(`[Server] ${socket.id} joined: ${roomId}`);
+    log(`[Server] ${socket.id} joined: ${roomId}`);
     socket.to(roomId).emit('viewer-joined');
   });
 
   // Agent announces it is online for a room
   socket.on('agent-online', (roomId) => {
+    log(`agent-online: ${socket.id} for room ${roomId}`);
     activeAgents.set(roomId, socket.id);
-    console.log(`[Server] Agent online in room: ${roomId}`);
+    log(`[Server] Agent online in room: ${roomId}`);
   });
 
   // Viewer checks if a room's agent is online
   socket.on('check-room-status', (roomId, callback) => {
+    log(`check-room-status: ${roomId} from ${socket.id}`);
     const agentSocketId = activeAgents.get(roomId);
     if (agentSocketId && io.sockets.sockets.get(agentSocketId)) {
+      log(`Host online for ${roomId}`);
       callback({ online: true });
     } else {
+      log(`Host offline for ${roomId}`);
       activeAgents.delete(roomId); // cleanup stale
       callback({ online: false });
     }
@@ -75,6 +91,13 @@ io.on('connection', (socket) => {
 
   socket.on('key-event', (data) => {
     if (currentRoom) socket.to(currentRoom).emit('key-event', data);
+  });
+
+  socket.on('manual-disconnect', () => {
+    if (currentRoom) {
+      log(`Manual disconnect from ${socket.id} in ${currentRoom}`);
+      socket.to(currentRoom).emit('remote-disconnected');
+    }
   });
 
   socket.on('disconnect', () => {

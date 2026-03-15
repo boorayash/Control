@@ -217,6 +217,12 @@
         Connection Status
         <span id="status-msg">Initializing...</span>
       </div>
+
+      <div id="disconnect-container" style="display: none; margin-top: 16px;">
+        <button id="disconnect-btn" class="copy-btn" style="width: 100%; justify-content: center; background: rgba(244,63,94,0.1); border-color: rgba(244,63,94,0.2); color: #fb7185;">
+          Disconnect Viewer
+        </button>
+      </div>
     </div>
     
     <script>
@@ -224,7 +230,12 @@
       const io = require('socket.io-client');
       const SimplePeer = require('simple-peer');
 
-      const socket = io('http://localhost:3000');
+      const socket = io('https://unintegrated-mei-glibly.ngrok-free.dev', {
+        transports: ['polling', 'websocket'],
+        extraHeaders: {
+          "ngrok-skip-browser-warning": "69420"
+        }
+      });
       let peer;
       let localStream;
       let roomId = null;
@@ -233,6 +244,8 @@
       const statusText = document.getElementById('status-text');
       const statusDot = document.getElementById('status-dot');
       const statusMsg = document.getElementById('status-msg');
+      const disconnectContainer = document.getElementById('disconnect-container');
+      const disconnectBtn = document.getElementById('disconnect-btn');
       const roomCodeEl = document.getElementById('room-code');
       const copyBtn = document.getElementById('copy-btn');
       const copyFeedback = document.getElementById('copy-feedback');
@@ -262,11 +275,33 @@
         if (isActive) {
           statusDot.classList.add('active');
           statusText.innerText = 'Online';
+          disconnectContainer.style.display = 'block';
         } else {
           statusDot.classList.remove('active');
           statusText.innerText = 'Ready';
+          disconnectContainer.style.display = 'none';
         }
       }
+
+      function disconnectViewer() {
+        if (peer) {
+          peer.destroy();
+          peer = null;
+        }
+        socket.emit('manual-disconnect');
+        updateStatus('Awaiting Viewer');
+      }
+
+      disconnectBtn.addEventListener('click', disconnectViewer);
+
+      socket.on('remote-disconnected', () => {
+        console.log('[Agent] Viewer disconnected manually');
+        if (peer) {
+          peer.destroy();
+          peer = null;
+        }
+        updateStatus('Awaiting Viewer');
+      });
 
       socket.on('connect', () => {
         console.log('[Agent] Socket connected!');

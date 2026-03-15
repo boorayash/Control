@@ -2,7 +2,12 @@ import { useState, useRef, useEffect } from 'react'
 import { io } from 'socket.io-client'
 import SimplePeer from 'simple-peer'
 
-const socket = io('http://localhost:3000')
+const socket = io('https://unintegrated-mei-glibly.ngrok-free.dev', {
+  transports: ['polling', 'websocket'],
+  extraHeaders: {
+    "ngrok-skip-browser-warning": "69420"
+  }
+})
 
 function App() {
   const [view, setView] = useState('landing') // 'landing' | 'session'
@@ -10,10 +15,30 @@ function App() {
   const [roomId, setRoomId] = useState('')
   const [error, setError] = useState('')
   const [hostStatus, setHostStatus] = useState(null) // null | 'checking' | 'online' | 'offline'
+  const [signalingStatus, setSignalingStatus] = useState('disconnected')
   
   const videoRef = useRef(null)
   const peerRef = useRef(null)
   const lastMoveRef = useRef(0)
+
+  useEffect(() => {
+    socket.on('connect', () => {
+        setSignalingStatus('connected');
+        setError('');
+    });
+    socket.on('connect_error', (err) => {
+        console.error('Socket Connection Error:', err);
+        setSignalingStatus('error');
+        setError('Connection to signaling server failed. Check ngrok URL.');
+    });
+    socket.on('disconnect', () => setSignalingStatus('disconnected'));
+    
+    return () => {
+        socket.off('connect');
+        socket.off('connect_error');
+        socket.off('disconnect');
+    };
+  }, []);
 
   const checkHostStatus = (code) => {
     if (!code.trim()) return;
@@ -40,6 +65,30 @@ function App() {
       }
     });
   };
+
+  const handleStopSession = () => {
+    if (peerRef.current) {
+      peerRef.current.destroy()
+    }
+    socket.emit('manual-disconnect')
+    setView('landing')
+    setStatus('Ready to connect')
+    setHostStatus(null)
+  }
+
+  useEffect(() => {
+    socket.on('remote-disconnected', () => {
+      console.log('Host disconnected manually');
+      if (peerRef.current) peerRef.current.destroy();
+      setView('landing');
+      setStatus('Host terminated the session');
+      setHostStatus(null);
+    });
+
+    return () => {
+      socket.off('remote-disconnected');
+    }
+  }, []);
 
   useEffect(() => {
     if (view !== 'session') return;
@@ -166,14 +215,14 @@ function App() {
         <main className="relative z-10 w-full max-w-5xl space-y-16 py-12">
           {/* Hero */}
           <div className="text-center space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-widest">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-6">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${signalingStatus === 'connected' ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${signalingStatus === 'connected' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
               </span>
-              v1.1 Stable
+              {signalingStatus === 'connected' ? 'Server Connected' : signalingStatus === 'checking' ? 'Connecting...' : 'Server Offline'}
             </div>
-            <h1 className="text-7xl font-black tracking-tighter text-white leading-none">
+            <h1 className="text-6xl font-black tracking-tighter text-white mb-4 leading-none">
               CONTROL<span className="text-blue-500">.</span>
             </h1>
             <p className="text-slate-400 text-lg max-w-lg mx-auto leading-relaxed">
@@ -240,11 +289,6 @@ function App() {
                         hostStatus === 'offline' ? 'text-rose-400' :
                         'text-slate-400'
                       }`}>
-                        <div className={`w-2 h-2 rounded-full ${
-                          hostStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]' :
-                          hostStatus === 'offline' ? 'bg-rose-500' :
-                          'bg-slate-500 animate-pulse'
-                        }`} />
                         {hostStatus === 'checking' && 'Checking host...'}
                         {hostStatus === 'online' && 'Host is online'}
                         {hostStatus === 'offline' && 'Host is offline'}
@@ -317,6 +361,17 @@ function App() {
         <span className={status === 'Connected to Host!' ? 'text-emerald-400' : 'text-rose-400'}>
           {status === 'Connected to Host!' ? 'Session Live' : 'Disconnected'}
         </span>
+        {status === 'Connected to Host!' && (
+          <>
+            <div className="w-px h-3 bg-white/10 mx-1"></div>
+            <button 
+              onClick={handleStopSession}
+              className="text-rose-400 hover:text-rose-300 transition-colors uppercase font-black"
+            >
+              Stop
+            </button>
+          </>
+        )}
       </div>
 
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 px-6 py-2.5 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 text-[10px] text-slate-400 uppercase tracking-[0.2em] font-extrabold flex gap-6 pointer-events-none opacity-40 hover:opacity-100 transition-all duration-300 z-40 group">
