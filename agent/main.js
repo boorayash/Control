@@ -1,12 +1,13 @@
-const { app, BrowserWindow, desktopCapturer, ipcMain, screen, clipboard } = require('electron')
+const { app, BrowserWindow, desktopCapturer, ipcMain, screen, clipboard, Tray, Menu } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
 const { mouse, keyboard, Point, Button, Key } = require("@mintplex-labs/nut-js")
 
 let mainWindow;
-let allowControl = false; // Permission gate
+let allowControl = true; // Permission gate - Default to ON
 let roomId = null;
+let tray = null;
 
 // Disable visual feedback for performance
 mouse.config.mouseSpeed = 10000;
@@ -83,13 +84,19 @@ ipcMain.on('update-permissions', (event, data) => {
   console.log(`[Agent] Remote Control: ${allowControl ? 'ENABLED' : 'DISABLED'}`);
 });
 
-// IPC Handlers for Remote Control
 ipcMain.on('mouse-move', async (event, data) => {
   if (!allowControl) return;
   try {
-    const { width, height } = screen.getPrimaryDisplay().bounds;
-    const x = data.x * width;
-    const y = data.y * height;
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const scale = primaryDisplay.scaleFactor;
+    const { width, height } = primaryDisplay.bounds;
+    
+    // Scale up for logical -> physical pixels
+    const physicalWidth = width * scale;
+    const physicalHeight = height * scale;
+    
+    const x = data.x * physicalWidth;
+    const y = data.y * physicalHeight;
     await mouse.setPosition(new Point(x, y));
   } catch (err) {
     console.error('[Agent] Mouse move error:', err);
@@ -99,9 +106,14 @@ ipcMain.on('mouse-move', async (event, data) => {
 ipcMain.on('mouse-click', async (event, data) => {
   if (!allowControl) return;
   try {
-    const { width, height } = screen.getPrimaryDisplay().bounds;
-    const x = data.x * width;
-    const y = data.y * height;
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const scale = primaryDisplay.scaleFactor;
+    const { width, height } = primaryDisplay.bounds;
+    
+    const physicalWidth = width * scale;
+    const physicalHeight = height * scale;
+    const x = data.x * physicalWidth;
+    const y = data.y * physicalHeight;
     
     await mouse.setPosition(new Point(x, y));
     const button = data.button === 'right' ? Button.RIGHT : Button.LEFT;
@@ -169,6 +181,48 @@ ipcMain.on('key-event', async (event, data) => {
     }
   } catch (e) {
     console.error("[Agent] Key event error:", e);
+  }
+});
+
+// --- Session Tray Management ---
+ipcMain.on('session-started', () => {
+  if (mainWindow) {
+    mainWindow.hide();
+  }
+  if (!tray) {
+    // We use a simple tray icon if user has one, else a fallback or null icon path might error.
+    // Assuming an icon.ico exists or letting Electron fallback to default app icon
+    const iconPath = path.join(__dirname, 'icon.ico'); 
+    
+    // We will wrap in try-catch in case icon doesn't exist to prevent crash
+    try {
+      tray = new Tray(iconPath);
+    } catch(e) {
+      // If no icon.ico exists, extracting the app's implicit icon or using an empty nativeImage
+      const emptyIcon = require('electron').nativeImage.createEmpty();
+      tray = new Tray(emptyIcon);
+    }
+    
+    tray.setToolTip('Control Agent - Live Session');
+    const contextMenu = Menu.buildFromTemplate([
+      { label: 'Open Dashboard', click: () => { if (mainWindow) mainWindow.show(); } },
+      { label: 'Quit Control Agent', click: () => { app.quit(); } }
+    ]);
+    tray.setContextMenu(contextMenu);
+    
+    tray.on('click', () => {
+      if (mainWindow) mainWindow.show();
+    });
+  }
+});
+
+ipcMain.on('session-ended', () => {
+  if (mainWindow) {
+    mainWindow.show();
+  }
+  if (tray) {
+    tray.destroy();
+    tray = null;
   }
 });
 

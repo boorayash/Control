@@ -1,7 +1,7 @@
 {
   "name": "agent",
   "version": "1.0.0",
-  "description": "",
+  "description": "Cross-platform remote desktop host agent for Control.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -13,21 +13,35 @@
     "productName": "ControlAgent",
     "win": {
       "target": [
-        "portable"
-      ]
+        "nsis"
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": true,
+      "artifactName": "ControlAgentInstaller.exe"
     },
     "directories": {
       "output": "dist"
-    }
+    },
+    "asar": false
   },
-  "keywords": [],
   "author": "Control Team",
   "license": "ISC",
+  "homepage": "https://github.com/boorayash/Control",
+  "bugs": {
+    "url": "https://github.com/boorayash/Control/issues"
+  },
   "type": "commonjs",
   "devDependencies": {
     "buffer": "^6.0.3",
     "electron": "^41.0.0",
     "electron-builder": "^26.8.1",
+    "electron-installer-windows": "^3.0.0",
+    "electron-packager": "^17.1.2",
     "events": "^3.3.0",
     "process": "^0.11.10"
   },

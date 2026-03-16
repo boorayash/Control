@@ -207,7 +207,7 @@
         <div class="toggle-row">
           <span class="toggle-label">Remote Control</span>
           <label class="switch">
-            <input type="checkbox" id="control-toggle">
+            <input type="checkbox" id="control-toggle" checked>
             <span class="slider"></span>
           </label>
         </div>
@@ -289,6 +289,7 @@
           peer = null;
         }
         socket.emit('manual-disconnect');
+        ipcRenderer.send('session-ended');
         updateStatus('Awaiting Viewer');
       }
 
@@ -300,6 +301,7 @@
           peer.destroy();
           peer = null;
         }
+        ipcRenderer.send('session-ended');
         updateStatus('Awaiting Viewer');
       });
 
@@ -361,6 +363,7 @@
 
         peer.on('connect', () => {
           updateStatus('Streaming Live', true);
+          ipcRenderer.send('session-started');
           console.log('[Agent] WebRTC Connected!');
         });
 
