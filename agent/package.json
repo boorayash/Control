@@ -6,24 +6,37 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
+    "build-installer": "node build-installer.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "build": {
     "appId": "com.control.agent",
-    "productName": "ControlAgent",
+    "productName": "Control Agent",
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "icon.ico"
+      "icon": "logo.png"
     },
+    "forceCodeSigning": false,
     "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Control Agent",
       "deleteAppDataOnUninstall": true,
       "artifactName": "ControlAgentInstaller.exe"
     },
+    "files": [
+      "main.js",
+      "index.html",
+      "logo.png",
+      "package.json",
+      ".env",
+      "node_modules/**/*"
+    ],
     "directories": {
       "output": "dist"
     },
@@ -47,6 +60,7 @@
   },
   "dependencies": {
     "@mintplex-labs/nut-js": "^4.2.2",
+    "dotenv": "^17.3.1",
     "simple-peer": "^9.11.1",
     "socket.io-client": "^4.8.3"
   }

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { io } from 'socket.io-client'
 import SimplePeer from 'simple-peer'
-
-const socket = io('https://unintegrated-mei-glibly.ngrok-free.dev', {
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
+const socket = io(SERVER_URL, {
   transports: ['polling', 'websocket'],
   extraHeaders: {
     "ngrok-skip-browser-warning": "69420"
@@ -255,7 +255,7 @@ function App() {
                   <svg className="w-24 h-24" fill="white" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                 </div>
                 <p className="text-slate-400 text-sm mb-6 relative z-10">Download the Host Agent, run it, and share your permanent Access Code with the viewer.</p>
-                <a href="http://localhost:3000/public/downloads/ControlAgent.exe" download className="relative z-10 w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-sm shadow-[0_10px_40px_-10px_rgba(37,99,235,0.4)] transition-all active:scale-[0.98] block text-center">
+                <a href={`${SERVER_URL}/public/downloads/ControlAgentInstaller.exe`} download className="relative z-10 w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-sm shadow-[0_10px_40px_-10px_rgba(37,99,235,0.4)] transition-all active:scale-[0.98] block text-center">
                   Download Host Agent (.exe)
                 </a>
               </div>

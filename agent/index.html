@@ -184,7 +184,7 @@
   <body>
     <div class="dashboard">
       <div class="header">
-        <h1>Control</h1>
+        <img src="logo.png" alt="Control" style="height: 28px; object-fit: contain;">
         <div class="status-pill">
           <div id="status-dot" class="dot"></div>
           <span id="status-text">Ready</span>
@@ -230,15 +230,74 @@
       const io = require('socket.io-client');
       const SimplePeer = require('simple-peer');
 
-      const socket = io('https://unintegrated-mei-glibly.ngrok-free.dev', {
-        transports: ['polling', 'websocket'],
-        extraHeaders: {
-          "ngrok-skip-browser-warning": "69420"
-        }
-      });
+      let socket;
       let peer;
       let localStream;
       let roomId = null;
+      let serverUrl = null;
+
+      function initSocket(url) {
+        if (socket) return;
+        serverUrl = url;
+        socket = io(serverUrl, {
+          transports: ['polling', 'websocket'],
+          extraHeaders: {
+            "ngrok-skip-browser-warning": "69420"
+          }
+        });
+
+        socket.on('connect', () => {
+          console.log('[Agent] Socket connected!');
+          if (roomId) {
+            socket.emit('join-room', roomId);
+            socket.emit('agent-online', roomId);
+          }
+        });
+
+        socket.on('viewer-ready', () => {
+          console.log('[Agent] Viewer is ready. Starting WebRTC...');
+          initPeer();
+        });
+
+        socket.on('signal', data => {
+          if (peer && !peer.destroyed) {
+            try {
+              peer.signal(data);
+            } catch (e) {
+              console.error('[Agent] Signal error:', e);
+            }
+          }
+        });
+
+        socket.on('remote-disconnected', () => {
+          console.log('[Agent] Viewer disconnected manually');
+          if (peer) {
+            peer.destroy();
+            peer = null;
+          }
+          ipcRenderer.send('session-ended');
+          updateStatus('Awaiting Viewer');
+        });
+
+        // Relay input control events to main process
+        socket.on('mouse-move', data => {
+          ipcRenderer.send('mouse-move', data);
+        });
+
+        socket.on('mouse-click', data => {
+          ipcRenderer.send('mouse-click', data);
+        });
+
+        socket.on('key-event', data => {
+          ipcRenderer.send('key-event', data);
+        });
+      }
+
+      // Receive Server URL from main process
+      ipcRenderer.on('set-server-url', (event, url) => {
+        console.log('[Agent] Server URL received:', url);
+        initSocket(url);
+      });
 
       const controlToggle = document.getElementById('control-toggle');
       const statusText = document.getElementById('status-text');
@@ -254,7 +313,7 @@
       ipcRenderer.on('set-room-id', (event, id) => {
         roomId = id;
         roomCodeEl.textContent = id;
-        socket.emit('join-room', roomId);
+        if (socket) socket.emit('join-room', roomId);
         console.log('[Agent] Room ID set:', roomId);
       });
 
@@ -295,24 +354,6 @@
 
       disconnectBtn.addEventListener('click', disconnectViewer);
 
-      socket.on('remote-disconnected', () => {
-        console.log('[Agent] Viewer disconnected manually');
-        if (peer) {
-          peer.destroy();
-          peer = null;
-        }
-        ipcRenderer.send('session-ended');
-        updateStatus('Awaiting Viewer');
-      });
-
-      socket.on('connect', () => {
-        console.log('[Agent] Socket connected!');
-        if (roomId) {
-          socket.emit('join-room', roomId);
-          socket.emit('agent-online', roomId);
-        }
-      });
-
       ipcRenderer.on('set-source', async (event, sourceId) => {
         try {
           localStream = await navigator.mediaDevices.getUserMedia({
@@ -330,11 +371,6 @@
           console.error('Stream Setup Error:', e);
           updateStatus('Capture Failed');
         }
-      });
-
-      socket.on('viewer-ready', () => {
-        console.log('[Agent] Viewer is ready. Starting WebRTC...');
-        initPeer();
       });
 
       function initPeer() {
@@ -378,28 +414,7 @@
         });
       }
 
-      socket.on('signal', data => {
-        if (peer && !peer.destroyed) {
-          try {
-            peer.signal(data);
-          } catch (e) {
-            console.error('[Agent] Signal error:', e);
-          }
-        }
-      });
 
-      // Relay input control events to main process
-      socket.on('mouse-move', data => {
-        ipcRenderer.send('mouse-move', data);
-      });
-
-      socket.on('mouse-click', data => {
-        ipcRenderer.send('mouse-click', data);
-      });
-
-      socket.on('key-event', data => {
-        ipcRenderer.send('key-event', data);
-      });
     </script>
   </body>
 </html>

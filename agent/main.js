@@ -3,6 +3,11 @@ const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
 const { mouse, keyboard, Point, Button, Key } = require("@mintplex-labs/nut-js")
+try {
+  require('dotenv').config({ path: path.join(__dirname, '.env') });
+} catch (e) {
+  console.log('[Agent] dotenv not found, using system/default env');
+}
 
 let mainWindow;
 let allowControl = true; // Permission gate - Default to ON
@@ -59,6 +64,7 @@ function createWindow () {
     resizable: false,
     autoHideMenuBar: true,
     backgroundColor: '#020617',
+    icon: path.join(__dirname, 'logo.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false
@@ -70,6 +76,10 @@ function createWindow () {
   mainWindow.webContents.on('did-finish-load', async () => {
     // Send room ID first
     mainWindow.webContents.send('set-room-id', roomId);
+
+    // Send server URL from environment
+    const serverUrl = process.env.SIGNALING_SERVER_URL || 'https://unintegrated-mei-glibly.ngrok-free.dev';
+    mainWindow.webContents.send('set-server-url', serverUrl);
     
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
     if (sources.length > 0) {
@@ -190,18 +200,15 @@ ipcMain.on('session-started', () => {
     mainWindow.hide();
   }
   if (!tray) {
-    // We use a simple tray icon if user has one, else a fallback or null icon path might error.
-    // Assuming an icon.ico exists or letting Electron fallback to default app icon
-    const iconPath = path.join(__dirname, 'icon.ico'); 
-    
-    // We will wrap in try-catch in case icon doesn't exist to prevent crash
+    const { nativeImage } = require('electron');
+    const logoPath = path.join(__dirname, 'logo.png');
+    let trayIcon;
     try {
-      tray = new Tray(iconPath);
-    } catch(e) {
-      // If no icon.ico exists, extracting the app's implicit icon or using an empty nativeImage
-      const emptyIcon = require('electron').nativeImage.createEmpty();
-      tray = new Tray(emptyIcon);
+      trayIcon = nativeImage.createFromPath(logoPath).resize({ width: 16, height: 16 });
+    } catch (e) {
+      trayIcon = nativeImage.createEmpty();
     }
+    tray = new Tray(trayIcon);
     
     tray.setToolTip('Control Agent - Live Session');
     const contextMenu = Menu.buildFromTemplate([
