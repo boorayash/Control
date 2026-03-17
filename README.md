@@ -48,14 +48,31 @@
 
 > **Prerequisites:** [Node.js](https://nodejs.org/) (v18+)
 
+### 1. Configure Environment Variables
+
+Copy the `.env.example` files in each component and fill in your values:
+
 ```bash
-# 1. Start the signaling server
+# Server
+cp server/.env.example server/.env   # Set PORT (default: 3000)
+
+# Viewer
+cp viewer/.env.example viewer/.env   # Set VITE_SERVER_URL
+
+# Agent
+cp agent/.env.example agent/.env     # Set SIGNALING_SERVER_URL
+```
+
+### 2. Run
+
+```bash
+# Start the signaling server
 cd server && npm install && npm start
 
-# 2. Launch the host agent (on the machine you want to share)
+# Launch the host agent (on the machine you want to share)
 cd agent && npm install && npm start
 
-# 3. Start the viewer (on any machine)
+# Start the viewer (on any machine)
 cd viewer && npm install && npm run dev
 ```
 
@@ -77,30 +94,37 @@ The signaling server runs on `localhost:3000` by default. To connect across netw
    ```bash
    ngrok http 3000
    ```
-2. **Update socket URLs** — Replace `http://localhost:3000` with your public URL in:
-   - `viewer/src/App.jsx` (line 5)
-   - `agent/index.html` (socket connection line)
+2. **Update your `.env` files** with the public URL:
+   - `viewer/.env` → `VITE_SERVER_URL=https://your-id.ngrok-free.dev`
+   - `agent/.env` → `SIGNALING_SERVER_URL=https://your-id.ngrok-free.dev`
 3. **Connect** — Run the Agent on the host, open the Viewer on the remote machine.
 
 ---
 
 ## 🔒 Security
 
-- **Permission Gate** — Remote control is OFF by default. The host must explicitly toggle it on.
+- **Permission Gate** — Remote control can be toggled on/off from the Agent dashboard.
 - **Room Isolation** — All WebRTC signals and input events are scoped to a private room ID.
 - **Input Guard** — The Agent rejects all incoming input unless the permission toggle is active.
 - **Online Tracking** — Server validates agent presence before allowing viewer connections.
 
 ---
 
-## 📦 Building the Agent (.exe)
+## 📦 Building the Agent Installer (.exe)
 
 ```bash
 cd agent
-npm run dist
+node build-installer.js
 ```
 
-The portable `.exe` will be generated in `agent/dist/`. Upload it as a [GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github) asset for distribution.
+> **Note:** On Windows, enable **Developer Mode** (Settings → System → For developers) or run as Administrator for the build to succeed.
+
+This will:
+1. Package the app with `electron-builder` (NSIS installer)
+2. Output the installer to `agent/dist/ControlAgentInstaller.exe`
+3. Auto-sync it to `server/public/downloads/` for the website download button
+
+The installer includes a proper setup wizard with installation path selection, desktop shortcut, and Start Menu entry.
 
 ---
 
@@ -121,14 +145,21 @@ The portable `.exe` will be generated in `agent/dist/`. Upload it as a [GitHub R
 
 ```
 screen/
-├── server/            # Signaling server
-│   ├── index.js       # Express + Socket.IO + online tracking
-│   └── public/        # Static file serving (agent downloads)
-├── agent/             # Host agent (Electron)
-│   ├── main.js        # Persistent room ID, native input, permissions
-│   ├── index.html     # Agent dashboard UI
-│   └── dist/          # Built .exe (gitignored)
-└── viewer/            # Viewer client (React)
-    ├── src/App.jsx    # Landing page + WebRTC session
-    └── src/index.css  # Global styles + Inter font
+├── logo/                    # Source brand assets
+├── server/                  # Signaling server
+│   ├── index.js             # Express + Socket.IO + online tracking
+│   ├── .env.example         # Environment variable template
+│   └── public/              # Static file serving (agent downloads)
+├── agent/                   # Host agent (Electron)
+│   ├── main.js              # Persistent room ID, native input, permissions
+│   ├── index.html           # Agent dashboard UI
+│   ├── logo.png             # App icon & tray icon
+│   ├── build-installer.js   # NSIS installer build script
+│   ├── .env.example         # Environment variable template
+│   └── dist/                # Built installer (gitignored)
+└── viewer/                  # Viewer client (React)
+    ├── src/App.jsx           # Landing page + WebRTC session
+    ├── src/index.css         # Global styles + Inter font
+    ├── public/logo.png       # Favicon & web assets
+    └── .env.example          # Environment variable template
 ```
