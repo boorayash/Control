@@ -12,7 +12,7 @@
 
 ---
 
-**Control** is a peer-to-peer remote desktop tool that lets you share your screen and grant native mouse & keyboard control to anyone through a browser. No accounts, no installs on the viewer side — just a permanent access code.
+**Control v2.0.0** is a professional, peer-to-peer remote desktop tool that lets you share your screen and grant native mouse & keyboard control to anyone through a browser. No accounts, no installs on the viewer side — just a permanent access code.
 
 ## ✨ Features
 
@@ -99,6 +99,11 @@ The signaling server runs on `localhost:3000` by default. To connect across netw
    - `agent/.env` → `SIGNALING_SERVER_URL=https://your-id.ngrok-free.dev`
 3. **Connect** — Run the Agent on the host, open the Viewer on the remote machine.
 
+### Production Hosting
+- **Signaling Server**: Deployed to [Render](https://control-rqp1.onrender.com).
+- **Web Viewer**: Deployed to [Vercel](https://ctrldesk.vercel.app/).
+- **Agent Installer**: Hosted via [GitHub Releases](https://github.com/boorayash/Control/releases).
+
 ---
 
 ## 🔒 Security
@@ -122,7 +127,8 @@ node build-installer.js
 This will:
 1. Package the app with `electron-builder` (NSIS installer)
 2. Output the installer to `agent/dist/ControlAgentInstaller.exe`
-3. Auto-sync it to `server/public/downloads/` for the website download button
+3. Auto-sync it to `server/public/downloads/` for local testing.
+4. **Publish**: Upload the `.exe` to GitHub Releases for production distribution.
 
 The installer includes a proper setup wizard with installation path selection, desktop shortcut, and Start Menu entry.
 
