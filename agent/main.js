@@ -18,6 +18,48 @@ let tray = null;
 mouse.config.mouseSpeed = 10000;
 keyboard.config.autoDelayMs = 0;
 
+// --- Fix A: Cache display metrics (never read inside mouse handler) ---
+let cachedScreenWidth = 0;
+let cachedScreenHeight = 0;
+
+function updateDisplayMetrics() {
+  const display = screen.getPrimaryDisplay();
+  const scale = display.scaleFactor;
+  cachedScreenWidth = display.bounds.width * scale;
+  cachedScreenHeight = display.bounds.height * scale;
+  console.log(`[Agent] Display metrics cached: ${cachedScreenWidth}x${cachedScreenHeight}`);
+}
+
+// --- Fix B: Non-blocking cursor worker loop with lerp smoothing ---
+let targetX = -1;
+let targetY = -1;
+let currentX = -1;
+let currentY = -1;
+let hasPendingMove = false;
+
+const LERP = 0.45; // 0 = no movement, 1 = instant teleport. 0.45 = smooth but fast
+
+// 120Hz cursor worker — lerps toward target, no queue buildup, no jumps
+setInterval(() => {
+  if (!allowControl || targetX < 0) return;
+  
+  if (currentX < 0) {
+    // First time: snap to target directly
+    currentX = targetX;
+    currentY = targetY;
+  } else {
+    // Lerp toward target
+    currentX += (targetX - currentX) * LERP;
+    currentY += (targetY - currentY) * LERP;
+    
+    // Snap when close enough to avoid micro-drift
+    if (Math.abs(targetX - currentX) < 0.5) currentX = targetX;
+    if (Math.abs(targetY - currentY) < 0.5) currentY = targetY;
+  }
+  
+  mouse.setPosition(new Point(Math.round(currentX), Math.round(currentY))).catch(() => {});
+}, 8);
+
 // --- Persistent Room ID ---
 function getConfigPath() {
   return path.join(app.getPath('userData'), 'control-config.json');
@@ -94,36 +136,19 @@ ipcMain.on('update-permissions', (event, data) => {
   console.log(`[Agent] Remote Control: ${allowControl ? 'ENABLED' : 'DISABLED'}`);
 });
 
-ipcMain.on('mouse-move', async (event, data) => {
+ipcMain.on('mouse-move', (event, data) => {
   if (!allowControl) return;
-  try {
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const scale = primaryDisplay.scaleFactor;
-    const { width, height } = primaryDisplay.bounds;
-    
-    // Scale up for logical -> physical pixels
-    const physicalWidth = width * scale;
-    const physicalHeight = height * scale;
-    
-    const x = data.x * physicalWidth;
-    const y = data.y * physicalHeight;
-    await mouse.setPosition(new Point(x, y));
-  } catch (err) {
-    console.error('[Agent] Mouse move error:', err);
-  }
+  // Just update target — the 120Hz worker loop handles actual movement
+  targetX = data.x * cachedScreenWidth;
+  targetY = data.y * cachedScreenHeight;
+  hasPendingMove = true;
 });
 
 ipcMain.on('mouse-click', async (event, data) => {
   if (!allowControl) return;
   try {
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const scale = primaryDisplay.scaleFactor;
-    const { width, height } = primaryDisplay.bounds;
-    
-    const physicalWidth = width * scale;
-    const physicalHeight = height * scale;
-    const x = data.x * physicalWidth;
-    const y = data.y * physicalHeight;
+    const x = data.x * cachedScreenWidth;
+    const y = data.y * cachedScreenHeight;
     
     await mouse.setPosition(new Point(x, y));
     const button = data.button === 'right' ? Button.RIGHT : Button.LEFT;
@@ -234,6 +259,14 @@ ipcMain.on('session-ended', () => {
 });
 
 app.whenReady().then(() => {
+  // Fix A: Cache display metrics at startup
+  updateDisplayMetrics();
+  
+  // Re-cache when displays change (monitor plugged/unplugged/resolution change)
+  screen.on('display-added', updateDisplayMetrics);
+  screen.on('display-removed', updateDisplayMetrics);
+  screen.on('display-metrics-changed', updateDisplayMetrics);
+
   createWindow()
 
   app.on('activate', function () {

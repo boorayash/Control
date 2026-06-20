@@ -20,6 +20,10 @@ function App() {
   const videoRef = useRef(null)
   const peerRef = useRef(null)
   const lastMoveRef = useRef(0)
+  const latestCoordsRef = useRef(null)
+  const sendingRef = useRef(false)
+  const cachedRectRef = useRef(null)
+  const rectTimerRef = useRef(0)
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -161,10 +165,20 @@ function App() {
     }
   }, [view, roomId])
 
-  // Coordinate Mapping logic (same as before)
+  // Fix C: Cache bounding rect (refresh every 500ms, not every mouse event)
+  const getCachedRect = () => {
+    const now = Date.now();
+    if (!cachedRectRef.current || now - rectTimerRef.current > 500) {
+      cachedRectRef.current = videoRef.current?.getBoundingClientRect() || null;
+      rectTimerRef.current = now;
+    }
+    return cachedRectRef.current;
+  };
+
   const getNormalizedCoords = (e) => {
     if (!videoRef.current) return null;
-    const rect = videoRef.current.getBoundingClientRect();
+    const rect = getCachedRect();
+    if (!rect) return null;
     const videoWidth = videoRef.current.videoWidth;
     const videoHeight = videoRef.current.videoHeight;
     if (!videoWidth || !videoHeight) return null;
@@ -189,12 +203,24 @@ function App() {
     return { x, y };
   };
 
+  // Fix C: rAF loop — only send the LATEST mouse position, never queue old ones
+  useEffect(() => {
+    if (view !== 'session') return;
+    let rafId;
+    const sendLoop = () => {
+      if (latestCoordsRef.current) {
+        socket.emit('mouse-move', latestCoordsRef.current);
+        latestCoordsRef.current = null;
+      }
+      rafId = requestAnimationFrame(sendLoop);
+    };
+    rafId = requestAnimationFrame(sendLoop);
+    return () => cancelAnimationFrame(rafId);
+  }, [view]);
+
   const handleMouseMove = (e) => {
-    const now = Date.now();
-    if (now - lastMoveRef.current < 16) return;
-    lastMoveRef.current = now;
     const coords = getNormalizedCoords(e);
-    if (coords) socket.emit('mouse-move', coords);
+    if (coords) latestCoordsRef.current = coords; // just overwrite, rAF loop will send
   };
 
   const handleMouseDown = (e) => {
